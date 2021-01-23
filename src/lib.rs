@@ -179,7 +179,6 @@ impl<C: Data, T: GridIter<C>> Widget<T> for GridView<C> {
         // otherwise the scroll will be locked to an axis and provide concrete constraints
         // on that axis
         let child_bc = constraints(axis, bc, 0., bc.max().height);
-        dbg!(child_bc);
 
         let minor_axis_count = match self.minor_axis_count {
             // this will assume grid is laid out vertically
@@ -203,7 +202,6 @@ impl<C: Data, T: GridIter<C>> Widget<T> for GridView<C> {
             }
             MinorAxisCount::Count(count) => count as usize,
         };
-        dbg!(minor_axis_count);
 
         let mut children = self.children.iter_mut();
 
@@ -220,13 +218,9 @@ impl<C: Data, T: GridIter<C>> Widget<T> for GridView<C> {
 
             if (idx + 1) % minor_axis_count == 0 {
                 // have to correct overshoot
-                // minor = minor.max(axis.minor(child_size));
-                // dbg!("major", minor);
                 major_pos += axis.major(child_size) + spacing;
                 minor_pos = 0.;
             } else {
-                // dbg!("minor", minor);
-                // minor = minor.max(axis.minor(child_size));
                 minor_pos += axis.minor(child_size) + spacing;
             }
             // have to correct overshoot

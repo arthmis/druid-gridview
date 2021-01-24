@@ -1,52 +1,128 @@
-use std::{cmp::Ordering, fmt::Write, sync::Arc};
+//! A basic grid view widget.
+
+use std::{cmp::Ordering, sync::Arc};
 
 use druid::{
     widget::Axis, BoxConstraints, Data, Env, KeyOrValue, LifeCycle, Point, Rect, Size, Widget,
     WidgetPod,
 };
 
-enum MinorAxisCount {
-    Wrap,
-    Count(u64),
-}
+/// A grid view widget for a variable size collection of items.
 pub struct GridView<T> {
     closure: Box<dyn Fn() -> Box<dyn Widget<T>>>,
     children: Vec<WidgetPod<T, Box<dyn Widget<T>>>>,
     axis: Axis,
-    spacing: KeyOrValue<f64>,
+    vertical_spacing: KeyOrValue<f64>,
+    horizontal_spacing: KeyOrValue<f64>,
     minor_axis_count: MinorAxisCount,
 }
 
+/// The number of elements found on the minor axis of the grid
+enum MinorAxisCount {
+    /// If this is wrap, the grid determines the max amount of items per
+    /// minor axis. Wrap assumes the grid items are equal in size.
+    Wrap,
+    /// A user specified number of elements on minor axis. Can overflow
+    /// the container if the count * size of grid items is larger than container
+    Count(u64), // this should probably take a KeyOrValue<u64> instead
+}
+
 impl<T: Data> GridView<T> {
+    /// Create a new grid view widget. The closure will be called when a new item needs
+    /// to be constructed.
+    ///
+    /// Defaults to a vertical layout, 0 spacing between grid items and 5 items on the
+    /// minor axis
     pub fn new<W: Widget<T> + 'static>(closure: impl Fn() -> W + 'static) -> Self {
         GridView {
             closure: Box::new(move || Box::new(closure())),
             children: Vec::new(),
             axis: Axis::Vertical,
-            spacing: KeyOrValue::Concrete(0.),
+            vertical_spacing: KeyOrValue::Concrete(0.),
+            horizontal_spacing: KeyOrValue::Concrete(0.),
             minor_axis_count: MinorAxisCount::Count(5),
         }
     }
 
+    // Sets the widget to display horizontally.
+    pub fn horizontal(mut self) -> Self {
+        self.axis = Axis::Horizontal;
+        self
+    }
+
+    /// This will allow the grid to automatically determine how many items
+    /// can be laid out on the minor axis before wrapping.
+    ///
+    /// If this is set along with [`with_minor_axis_count`], wrap will take priority.
     pub fn wrap(mut self) -> Self {
         self.minor_axis_count = MinorAxisCount::Wrap;
         self
     }
 
+    /// Builder style method that sets how many elements will be laid out on the
+    /// minor axis before the grid wraps around to the next row/column.
+    ///
+    /// If the amount of items * size of items is larger than the container, this will
+    /// overflow the container. Use [`wrap`] to automatically wrap grid items.
     pub fn with_minor_axis_count(mut self, count: u64) -> Self {
         self.minor_axis_count = MinorAxisCount::Count(count);
         self
     }
 
-    pub fn with_spacing(mut self, spacing: impl Into<KeyOrValue<f64>>) -> Self {
-        self.spacing = spacing.into();
-        self
-    }
-    pub fn set_spacing(&mut self, spacing: impl Into<KeyOrValue<f64>>) -> &mut Self {
-        self.spacing = spacing.into();
+    /// Sets how many elements will be laid out on the minor axis before the grid
+    /// wraps around to the next row/column.
+    ///
+    /// If the amount of items * size of items is larger than the container, this will
+    /// overflow the container. Use [`wrap`] to automatically wrap grid items.
+    pub fn set_minor_axis_count(&mut self, count: u64) -> &mut Self {
+        self.minor_axis_count = MinorAxisCount::Count(count);
         self
     }
 
+    /// Builder style method that sets the vertical and horizontal spacing
+    /// between elements to the same value.
+    pub fn with_spacing(mut self, spacing: impl Into<KeyOrValue<f64>>) -> Self {
+        let spacing = spacing.into();
+        self.vertical_spacing = spacing.clone();
+        self.horizontal_spacing = spacing;
+        self
+    }
+
+    /// Sets the vertical and horizontal between elements to the same value.
+    pub fn set_spacing(&mut self, spacing: impl Into<KeyOrValue<f64>>) -> &mut Self {
+        let spacing = spacing.into();
+        self.vertical_spacing = spacing.clone();
+        self.horizontal_spacing = spacing;
+        self
+    }
+
+    /// Builder style method that sets the spacing between elements vertically.
+    pub fn with_vertical_spacing(mut self, spacing: impl Into<KeyOrValue<f64>>) -> Self {
+        self.vertical_spacing = spacing.into();
+        self
+    }
+
+    /// Sets the spacing between elements vertically.
+    pub fn set_vertical_spacing(mut self, spacing: impl Into<KeyOrValue<f64>>) -> Self {
+        self.vertical_spacing = spacing.into();
+        self
+    }
+
+    /// Builder style method that sets the spacing between elements horizontally.
+    pub fn with_horizontal_spacing(mut self, spacing: impl Into<KeyOrValue<f64>>) -> Self {
+        self.horizontal_spacing = spacing.into();
+        self
+    }
+
+    /// Sets the spacing between elements horizontally.
+    pub fn set_horizontal_spacing(mut self, spacing: impl Into<KeyOrValue<f64>>) -> Self {
+        self.horizontal_spacing = spacing.into();
+        self
+    }
+
+    /// When the widget is created or the data changes, create or remove children as needed
+    ///
+    /// Returns `true` if children were added or removed.
     fn update_child_count(&mut self, data: &impl GridIter<T>, _env: &Env) -> bool {
         let len = self.children.len();
         match len.cmp(&data.data_len()) {
@@ -63,6 +139,7 @@ impl<T: Data> GridView<T> {
     }
 }
 
+/// This iterator enables writing GridView widget for any `Data`.
 pub trait GridIter<T>: Data {
     fn for_each(&self, cb: impl FnMut(&T, usize));
 
@@ -70,10 +147,43 @@ pub trait GridIter<T>: Data {
 
     fn data_len(&self) -> usize;
 
-    fn child_data(&self) -> &T;
+    fn child_data(&self) -> Option<&T>;
+
+    fn row(&self, cb: impl FnMut(&T, usize), row_len: usize);
+    fn row_mut(&mut self, cb: impl FnMut(&mut T, usize), row_len: usize);
 }
 
 impl<T: Data> GridIter<T> for Arc<Vec<T>> {
+    fn row(&self, mut cb: impl FnMut(&T, usize), row_len: usize) {
+        let chunks_len = row_len;
+        for (i, row) in self.chunks(chunks_len).enumerate() {
+            for (j, item) in row.iter().enumerate() {
+                cb(item, i * chunks_len + j)
+            }
+        }
+    }
+    fn row_mut(&mut self, mut cb: impl FnMut(&mut T, usize), row_len: usize) {
+        let chunks_len = row_len;
+        let mut new_data = Vec::with_capacity(self.data_len());
+        let mut any_changed = false;
+
+        for (i, row) in self.chunks(chunks_len).enumerate() {
+            for (j, item) in row.iter().enumerate() {
+                let mut d = item.to_owned();
+                cb(&mut d, i * chunks_len + j);
+
+                if !any_changed && !item.same(&d) {
+                    any_changed = true;
+                }
+                new_data.push(d);
+            }
+        }
+
+        if any_changed {
+            *self = Arc::new(new_data);
+        }
+    }
+
     fn for_each(&self, mut cb: impl FnMut(&T, usize)) {
         for (i, item) in self.iter().enumerate() {
             cb(item, i);
@@ -103,8 +213,8 @@ impl<T: Data> GridIter<T> for Arc<Vec<T>> {
         self.len()
     }
 
-    fn child_data(&self) -> &T {
-        self.last().unwrap()
+    fn child_data(&self) -> Option<&T> {
+        self.iter().next()
     }
 }
 
@@ -169,35 +279,45 @@ impl<C: Data, T: GridIter<C>> Widget<T> for GridView<C> {
         env: &druid::Env,
     ) -> druid::Size {
         let axis = self.axis;
-        let spacing = self.spacing.resolve(env);
-        let mut major_pos = 0.;
-        let mut minor_pos = 0.;
+        let (major_spacing, minor_spacing) = match axis {
+            Axis::Vertical => (
+                self.vertical_spacing.resolve(env),
+                self.horizontal_spacing.resolve(env),
+            ),
+            Axis::Horizontal => (
+                self.horizontal_spacing.resolve(env),
+                self.vertical_spacing.resolve(env),
+            ),
+        };
+        let mut major_pos = 0.0;
+        let mut minor_pos = 0.0;
         let mut paint_rect = Rect::ZERO;
         // let child_bc = constraints(axis, bc, 0., f64::INFINITY);
         // I don't know if this is the right way to go. I would assume a grid is
         // used in a Scroll and that would provide the infinite constraints if necessary
         // otherwise the scroll will be locked to an axis and provide concrete constraints
         // on that axis
-        let child_bc = constraints(axis, bc, 0., bc.max().height);
+        // this has to use axis.constraints function but it is private
+        // reimplemented below for convenience
+        let child_bc = constraints(axis, bc, 0., axis.major(bc.max()));
+
+        // let child_bc = constraints(axis, bc, 0., );
 
         let minor_axis_count = match self.minor_axis_count {
-            // this will assume grid is laid out vertically
-            // one day this will account for both vertical and horizontal
             MinorAxisCount::Wrap => {
-                let max_width = bc.max().width;
+                let minor_len = axis.minor(bc.max());
                 let child_size = match self.children.last_mut() {
                     Some(child) => {
-                        let size = child.layout(ctx, &child_bc, data.child_data(), env);
+                        let size = child.layout(ctx, &child_bc, data.child_data().unwrap(), env);
                         size
                     }
                     None => Size::ZERO,
                 };
-                dbg!(&child_size);
                 if child_size == Size::ZERO {
                     // TODO: this should be zero, but i'm making it one to avoid divide by zero
                     1
                 } else {
-                    (max_width / child_size.width).floor() as usize
+                    (minor_len / axis.minor(child_size)).floor() as usize
                 }
             }
             MinorAxisCount::Count(count) => count as usize,
@@ -205,27 +325,53 @@ impl<C: Data, T: GridIter<C>> Widget<T> for GridView<C> {
 
         let mut children = self.children.iter_mut();
 
-        data.for_each(|child_data, idx| {
-            let child = match children.next() {
-                Some(child) => child,
-                None => return,
-            };
+        data.row(
+            |child_data, idx| {
+                let child = match children.next() {
+                    Some(child) => child,
+                    None => return,
+                };
 
-            let child_size = child.layout(ctx, &child_bc, child_data, env);
-            let child_pos: Point = axis.pack(major_pos, minor_pos).into();
-            child.set_origin(ctx, child_data, env, child_pos);
-            paint_rect = paint_rect.union(child.paint_rect());
+                let child_size = child.layout(ctx, &child_bc, child_data, env);
+                let child_pos: Point = axis.pack(major_pos, minor_pos).into();
+                child.set_origin(ctx, child_data, env, child_pos);
+                paint_rect = paint_rect.union(child.paint_rect());
 
-            if (idx + 1) % minor_axis_count == 0 {
-                // have to correct overshoot
-                major_pos += axis.major(child_size) + spacing;
-                minor_pos = 0.;
-            } else {
-                minor_pos += axis.minor(child_size) + spacing;
-            }
-            // have to correct overshoot
-        });
+                if (idx + 1) % minor_axis_count == 0 {
+                    // TODO: have to correct overshoot
+                    major_pos += axis.major(child_size) + major_spacing;
+                    minor_pos = 0.;
+                } else {
+                    minor_pos += axis.minor(child_size) + minor_spacing;
+                }
+                // TODO: have to correct overshoot
+            },
+            minor_axis_count,
+        );
+        // data.for_each(|child_data, idx| {
+        //     let child = match children.next() {
+        //         Some(child) => child,
+        //         None => return,
+        //     };
+
+        //     let child_size = child.layout(ctx, &child_bc, child_data, env);
+        //     let child_pos: Point = axis.pack(major_pos, minor_pos).into();
+        //     child.set_origin(ctx, child_data, env, child_pos);
+        //     paint_rect = paint_rect.union(child.paint_rect());
+
+        //     if (idx + 1) % minor_axis_count == 0 {
+        //         // have to correct overshoot
+        //         major_pos += axis.major(child_size) + spacing;
+        //         minor_pos = 0.;
+        //     } else {
+        //         minor_pos += axis.minor(child_size) + spacing;
+        //     }
+        //     // have to correct overshoot
+        // });
+
         // let my_size = bc.constrain(Size::from(axis.pack(major_pos, minor_pos)));
+        // this should be correct, however the list widget uses above commented
+        // code to get the widget size
         let my_size = bc.constrain(paint_rect.size());
         let insets = paint_rect - my_size.to_rect();
         ctx.set_paint_insets(insets);

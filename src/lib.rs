@@ -2,9 +2,11 @@
 
 use std::{cmp::Ordering, sync::Arc};
 
+use druid::im::Vector;
+
 use druid::{
-    widget::Axis, BoxConstraints, Data, Env, KeyOrValue, LifeCycle, Point, Rect, Size, Widget,
-    WidgetPod,
+    widget::Axis, BoxConstraints, Data, Env, KeyOrValue, LifeCycle, Point,
+    Rect, Size, Widget, WidgetPod,
 };
 
 /// A grid view widget for a variable size collection of items.
@@ -33,7 +35,9 @@ impl<T: Data> GridView<T> {
     ///
     /// Defaults to a vertical layout, 0 spacing between grid items and 5 items on the
     /// minor axis
-    pub fn new<W: Widget<T> + 'static>(closure: impl Fn() -> W + 'static) -> Self {
+    pub fn new<W: Widget<T> + 'static>(
+        closure: impl Fn() -> W + 'static,
+    ) -> Self {
         GridView {
             closure: Box::new(move || Box::new(closure())),
             children: Vec::new(),
@@ -89,7 +93,10 @@ impl<T: Data> GridView<T> {
     }
 
     /// Sets the vertical and horizontal between elements to the same value.
-    pub fn set_spacing(&mut self, spacing: impl Into<KeyOrValue<f64>>) -> &mut Self {
+    pub fn set_spacing(
+        &mut self,
+        spacing: impl Into<KeyOrValue<f64>>,
+    ) -> &mut Self {
         let spacing = spacing.into();
         self.vertical_spacing = spacing.clone();
         self.horizontal_spacing = spacing;
@@ -97,25 +104,37 @@ impl<T: Data> GridView<T> {
     }
 
     /// Builder style method that sets the spacing between elements vertically.
-    pub fn with_vertical_spacing(mut self, spacing: impl Into<KeyOrValue<f64>>) -> Self {
+    pub fn with_vertical_spacing(
+        mut self,
+        spacing: impl Into<KeyOrValue<f64>>,
+    ) -> Self {
         self.vertical_spacing = spacing.into();
         self
     }
 
     /// Sets the spacing between elements vertically.
-    pub fn set_vertical_spacing(mut self, spacing: impl Into<KeyOrValue<f64>>) -> Self {
+    pub fn set_vertical_spacing(
+        mut self,
+        spacing: impl Into<KeyOrValue<f64>>,
+    ) -> Self {
         self.vertical_spacing = spacing.into();
         self
     }
 
     /// Builder style method that sets the spacing between elements horizontally.
-    pub fn with_horizontal_spacing(mut self, spacing: impl Into<KeyOrValue<f64>>) -> Self {
+    pub fn with_horizontal_spacing(
+        mut self,
+        spacing: impl Into<KeyOrValue<f64>>,
+    ) -> Self {
         self.horizontal_spacing = spacing.into();
         self
     }
 
     /// Sets the spacing between elements horizontally.
-    pub fn set_horizontal_spacing(mut self, spacing: impl Into<KeyOrValue<f64>>) -> Self {
+    pub fn set_horizontal_spacing(
+        mut self,
+        spacing: impl Into<KeyOrValue<f64>>,
+    ) -> Self {
         self.horizontal_spacing = spacing.into();
         self
     }
@@ -123,7 +142,11 @@ impl<T: Data> GridView<T> {
     /// When the widget is created or the data changes, create or remove children as needed
     ///
     /// Returns `true` if children were added or removed.
-    fn update_child_count(&mut self, data: &impl GridIter<T>, _env: &Env) -> bool {
+    fn update_child_count(
+        &mut self,
+        data: &impl GridIter<T>,
+        _env: &Env,
+    ) -> bool {
         let len = self.children.len();
         match len.cmp(&data.data_len()) {
             Ordering::Greater => self.children.truncate(data.data_len()),
@@ -141,48 +164,52 @@ impl<T: Data> GridView<T> {
 
 /// This iterator enables writing GridView widget for any `Data`.
 pub trait GridIter<T>: Data {
+    /// Iterate over each data child.
     fn for_each(&self, cb: impl FnMut(&T, usize));
 
+    /// Iterate over each data child and keep track of changed data to update self.
     fn for_each_mut(&mut self, cb: impl FnMut(&mut T, usize));
 
+    /// Return the data length.
     fn data_len(&self) -> usize;
 
-    fn child_data(&self) -> Option<&T>;
+    /// Return any child data to be used to get child size.
+    fn child_data(&self) -> Option<T>;
 
-    fn row(&self, cb: impl FnMut(&T, usize), row_len: usize);
-    fn row_mut(&mut self, cb: impl FnMut(&mut T, usize), row_len: usize);
+    // fn row(&self, cb: impl FnMut(&T, usize), row_len: usize);
+    // fn row_mut(&mut self, cb: impl FnMut(&mut T, usize), row_len: usize);
 }
 
 impl<T: Data> GridIter<T> for Arc<Vec<T>> {
-    fn row(&self, mut cb: impl FnMut(&T, usize), row_len: usize) {
-        let chunks_len = row_len;
-        for (i, row) in self.chunks(chunks_len).enumerate() {
-            for (j, item) in row.iter().enumerate() {
-                cb(item, i * chunks_len + j)
-            }
-        }
-    }
-    fn row_mut(&mut self, mut cb: impl FnMut(&mut T, usize), row_len: usize) {
-        let chunks_len = row_len;
-        let mut new_data = Vec::with_capacity(self.data_len());
-        let mut any_changed = false;
+    // fn row(&self, mut cb: impl FnMut(&T, usize), row_len: usize) {
+    //     let chunks_len = row_len;
+    //     for (i, row) in self.chunks(chunks_len).enumerate() {
+    //         for (j, item) in row.iter().enumerate() {
+    //             cb(item, i * chunks_len + j)
+    //         }
+    //     }
+    // }
+    // fn row_mut(&mut self, mut cb: impl FnMut(&mut T, usize), row_len: usize) {
+    //     let chunks_len = row_len;
+    //     let mut new_data = Vec::with_capacity(self.data_len());
+    //     let mut any_changed = false;
 
-        for (i, row) in self.chunks(chunks_len).enumerate() {
-            for (j, item) in row.iter().enumerate() {
-                let mut d = item.to_owned();
-                cb(&mut d, i * chunks_len + j);
+    //     for (i, row) in self.chunks(chunks_len).enumerate() {
+    //         for (j, item) in row.iter().enumerate() {
+    //             let mut d = item.to_owned();
+    //             cb(&mut d, i * chunks_len + j);
 
-                if !any_changed && !item.same(&d) {
-                    any_changed = true;
-                }
-                new_data.push(d);
-            }
-        }
+    //             if !any_changed && !item.same(&d) {
+    //                 any_changed = true;
+    //             }
+    //             new_data.push(d);
+    //         }
+    //     }
 
-        if any_changed {
-            *self = Arc::new(new_data);
-        }
-    }
+    //     if any_changed {
+    //         *self = Arc::new(new_data);
+    //     }
+    // }
 
     fn for_each(&self, mut cb: impl FnMut(&T, usize)) {
         for (i, item) in self.iter().enumerate() {
@@ -213,8 +240,31 @@ impl<T: Data> GridIter<T> for Arc<Vec<T>> {
         self.len()
     }
 
-    fn child_data(&self) -> Option<&T> {
-        self.iter().next()
+    fn child_data(&self) -> Option<T> {
+        // TODO MUST FIX THIS - no panics
+        Some(self.iter().next().unwrap().clone())
+    }
+}
+
+impl<T: Data> GridIter<T> for Vector<T> {
+    fn for_each(&self, mut cb: impl FnMut(&T, usize)) {
+        for (i, item) in self.iter().enumerate() {
+            cb(item, i);
+        }
+    }
+
+    fn for_each_mut(&mut self, mut cb: impl FnMut(&mut T, usize)) {
+        for (i, item) in self.iter_mut().enumerate() {
+            cb(item, i);
+        }
+    }
+
+    fn data_len(&self) -> usize {
+        self.len()
+    }
+
+    fn child_data(&self) -> Option<T> {
+        Some(self.iter().next().unwrap().clone())
     }
 }
 
@@ -255,7 +305,13 @@ impl<C: Data, T: GridIter<C>> Widget<T> for GridView<C> {
         });
     }
 
-    fn update(&mut self, ctx: &mut druid::UpdateCtx, _old_data: &T, data: &T, env: &druid::Env) {
+    fn update(
+        &mut self,
+        ctx: &mut druid::UpdateCtx,
+        _old_data: &T,
+        data: &T,
+        env: &druid::Env,
+    ) {
         // we send update to children first, before adding or removing children;
         // this way we avoid sending update to newly added children, at the cost
         // of potentially updating children that are going to be removed.
@@ -308,7 +364,12 @@ impl<C: Data, T: GridIter<C>> Widget<T> for GridView<C> {
                 let minor_len = axis.minor(bc.max());
                 let child_size = match self.children.last_mut() {
                     Some(child) => {
-                        let size = child.layout(ctx, &child_bc, data.child_data().unwrap(), env);
+                        let size = child.layout(
+                            ctx,
+                            &child_bc,
+                            &data.child_data().unwrap(),
+                            env,
+                        );
                         size
                     }
                     None => Size::ZERO,
@@ -325,49 +386,49 @@ impl<C: Data, T: GridIter<C>> Widget<T> for GridView<C> {
 
         let mut children = self.children.iter_mut();
 
-        data.row(
-            |child_data, idx| {
-                let child = match children.next() {
-                    Some(child) => child,
-                    None => return,
-                };
+        // data.row(
+        //     |child_data, idx| {
+        //         let child = match children.next() {
+        //             Some(child) => child,
+        //             None => return,
+        //         };
 
-                let child_size = child.layout(ctx, &child_bc, child_data, env);
-                let child_pos: Point = axis.pack(major_pos, minor_pos).into();
-                child.set_origin(ctx, child_data, env, child_pos);
-                paint_rect = paint_rect.union(child.paint_rect());
+        //         let child_size = child.layout(ctx, &child_bc, child_data, env);
+        //         let child_pos: Point = axis.pack(major_pos, minor_pos).into();
+        //         child.set_origin(ctx, child_data, env, child_pos);
+        //         paint_rect = paint_rect.union(child.paint_rect());
 
-                if (idx + 1) % minor_axis_count == 0 {
-                    // TODO: have to correct overshoot
-                    major_pos += axis.major(child_size) + major_spacing;
-                    minor_pos = 0.;
-                } else {
-                    minor_pos += axis.minor(child_size) + minor_spacing;
-                }
-                // TODO: have to correct overshoot
-            },
-            minor_axis_count,
-        );
-        // data.for_each(|child_data, idx| {
-        //     let child = match children.next() {
-        //         Some(child) => child,
-        //         None => return,
-        //     };
+        //         if (idx + 1) % minor_axis_count == 0 {
+        //             // TODO: have to correct overshoot
+        //             major_pos += axis.major(child_size) + major_spacing;
+        //             minor_pos = 0.;
+        //         } else {
+        //             minor_pos += axis.minor(child_size) + minor_spacing;
+        //         }
+        //         // TODO: have to correct overshoot
+        //     },
+        //     minor_axis_count,
+        // );
+        data.for_each(|child_data, idx| {
+            let child = match children.next() {
+                Some(child) => child,
+                None => return,
+            };
 
-        //     let child_size = child.layout(ctx, &child_bc, child_data, env);
-        //     let child_pos: Point = axis.pack(major_pos, minor_pos).into();
-        //     child.set_origin(ctx, child_data, env, child_pos);
-        //     paint_rect = paint_rect.union(child.paint_rect());
+            let child_size = child.layout(ctx, &child_bc, child_data, env);
+            let child_pos: Point = axis.pack(major_pos, minor_pos).into();
+            child.set_origin(ctx, child_data, env, child_pos);
+            paint_rect = paint_rect.union(child.paint_rect());
 
-        //     if (idx + 1) % minor_axis_count == 0 {
-        //         // have to correct overshoot
-        //         major_pos += axis.major(child_size) + spacing;
-        //         minor_pos = 0.;
-        //     } else {
-        //         minor_pos += axis.minor(child_size) + spacing;
-        //     }
-        //     // have to correct overshoot
-        // });
+            if (idx + 1) % minor_axis_count == 0 {
+                // have to correct overshoot
+                major_pos += axis.major(child_size) + major_spacing;
+                minor_pos = 0.;
+            } else {
+                minor_pos += axis.minor(child_size) + minor_spacing;
+            }
+            // have to correct overshoot
+        });
 
         // let my_size = bc.constrain(Size::from(axis.pack(major_pos, minor_pos)));
         // this should be correct, however the list widget uses above commented
@@ -388,7 +449,12 @@ impl<C: Data, T: GridIter<C>> Widget<T> for GridView<C> {
     }
 }
 /// Generate constraints with new values on the major axis.
-fn constraints(axis: Axis, bc: &BoxConstraints, min_major: f64, major: f64) -> BoxConstraints {
+fn constraints(
+    axis: Axis,
+    bc: &BoxConstraints,
+    min_major: f64,
+    major: f64,
+) -> BoxConstraints {
     match axis {
         Axis::Horizontal => BoxConstraints::new(
             Size::new(min_major, bc.min().height),

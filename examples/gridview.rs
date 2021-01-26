@@ -4,38 +4,44 @@ use rand::SeedableRng;
 use std::sync::Arc;
 
 use druid::{
+    im::Vector,
     widget::{CrossAxisAlignment, Flex, MainAxisAlignment, Painter, Scroll, SizedBox},
     AppLauncher, Color, Data, Lens, RenderContext, Widget, WidgetExt, WindowDesc,
 };
 
 fn main() {
-    let data = {
-        let mut data = Vec::new();
+    let (vec, vector) = {
+        let mut vec = Vec::new();
+        let mut vector = Vector::new();
         let between = Uniform::from(0..=255);
         let mut rng = rand::rngs::SmallRng::from_entropy();
 
-        for _ in 0..50 {
+        for _ in 0..3_000 {
             let color = Color::rgb8(
                 between.sample(&mut rng),
                 between.sample(&mut rng),
                 between.sample(&mut rng),
             );
-            data.push(color);
+            vector.push_back(color.clone());
+            vec.push(color);
         }
-        data
+        (vec, vector)
     };
 
     let window = WindowDesc::new(grid_ui);
     AppLauncher::with_window(window)
         .launch(AppState {
-            colors: Arc::new(data),
+            // colors: Arc::new(data),
+            vec_colors: Arc::new(vec),
+            vector_colors: vector,
         })
         .unwrap();
 }
 
 #[derive(Clone, Data, Lens)]
 struct AppState {
-    colors: Arc<Vec<Color>>,
+    vec_colors: Arc<Vec<Color>>,
+    vector_colors: Vector<Color>,
 }
 
 fn grid_ui() -> impl Widget<AppState> {
@@ -53,7 +59,7 @@ fn grid_ui() -> impl Widget<AppState> {
     })
     .with_spacing(5.)
     .wrap()
-    .lens(AppState::colors);
+    .lens(AppState::vec_colors);
 
     let right_horizontal_grid = GridView::new(|| {
         let painter = Painter::new(|ctx, data: &Color, _env| {
@@ -71,7 +77,7 @@ fn grid_ui() -> impl Widget<AppState> {
     .with_minor_axis_count(5)
     .wrap()
     .horizontal()
-    .lens(AppState::colors);
+    .lens(AppState::vector_colors);
 
     let left = Flex::row()
         .with_flex_spacer(0.1)
